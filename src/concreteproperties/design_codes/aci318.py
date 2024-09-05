@@ -1,7 +1,8 @@
 """ACI 318 class for designing to the ACI318-19 Code, Imperial"""
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+
+# from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -11,8 +12,8 @@ import concreteproperties.utils as utils
 from concreteproperties.design_codes.design_code import DesignCode
 from concreteproperties.material import Concrete, SteelBar
 
-if TYPE_CHECKING:
-    from concreteproperties.concrete_section import ConcreteSection
+# if TYPE_CHECKING:
+#     from concreteproperties.concrete_section import ConcreteSection
 
 
 class ACI318(DesignCode):
@@ -20,14 +21,15 @@ class ACI318(DesignCode):
 
     def __init__(self) -> None:
         """Inits the ACI 318-19 class."""
+        self.analysis_code = "ACI 318-19"
         super().__init__()
 
-    def assign_concrete_section(
-        self,
-        concrete_section: ConcreteSection,
-    ) -> None:
-        """Assigns a concrete section to ACI 318"""
-        raise NotImplementedError
+    # def assign_concrete_section(
+    #     self,
+    #     concrete_section: ConcreteSection,
+    # ) -> None:
+    #     """Assigns a concrete section to ACI 318"""
+    #     raise NotImplementedError
 
     def calc_beta_1(self, fpc: float) -> float:
         """Calculate Beta_1 in accordance with ACI 318 Table 22.2.2.4.3.
