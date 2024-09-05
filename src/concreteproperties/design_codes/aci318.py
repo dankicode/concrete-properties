@@ -29,45 +29,122 @@ class ACI318(DesignCode):
         """Assigns a concrete section to ACI 318"""
         raise NotImplementedError
 
+    def calc_beta_1(self, fpc: float) -> float:
+        """Calculate Beta_1 in accordance with ACI 318 Table 22.2.2.4.3.
+
+        Args:
+            fpc: f'c in ksi
+
+        Returns:
+            Beta_1
+        """
+        if fpc >= 2.5 and fpc <= 4.0:
+            beta_1 = 0.85
+        elif fpc > 4.0 and fpc < 8.0:
+            beta_1 = 0.85 - (0.05 * (fpc - 4))
+        elif fpc >= 8.0:
+            beta_1 = 0.65
+        else:
+            print("f'c is less than 2.5ksi - assuming beta_1 = 0.85.")
+            return 0.85
+        return beta_1
+
+    def calc_modulus_of_rupture(self, fpc: float, lambda_agg: float = 1.0) -> float:
+        """
+        Calculate modulus of rupture, f_r in accordance with ACI 318.
+
+        Args:
+            fpc: f'c (ksi)
+            lambda_agg: lightweight aggregate factor = 1.0 for normal weight
+        """
+        fr = 7.5 * lambda_agg * ((fpc * 1000) ** 0.5) / 1000  # ksi
+        return fr
+
+    def calc_concrete_elastic_modulus(self, fpc: float, wc: float = 0.145) -> float:
+        """Calculates the elastic modulus of the concrete section per ACI 318.
+
+        Args:
+            fpc: f'c (ksi)
+            wc: Unreinforced concrete density (kcf), defaulting to normal weight
+                concrete value of 145
+        """
+        Ec = 33 * ((wc * 1000) ** 1.5) * ((fpc * 1000) ** 0.5) / 1000  # ksi
+        return Ec
+
     def create_concrete_material(
         self,
-        compressive_strength: float,
-        ultimate_strain: float = 0.003,
-        density: float = 0.145,
+        fpc: float,
+        eps_cu: float = 0.003,
+        wc: float = 0.145,
         colour: str = "lightgrey",
     ) -> Concrete:
         """Returns a concrete material object to ACI 318.
 
+        Assumes concrete takes no tension.
+
         Args:
-            compressive_strength: f'c (ksi)
-            ultimate_strain: Maximum concrete compressive strain at concrete
-                crushing
-            density: density of unreinforced concrete (kcf)
+            fpc: f'c (ksi)
+            eps_cu: Ultimate crushing strain of concrete
+            wc: density of unreinforced concrete (kcf)
             colour: color of the concrete for rendering, defaults to 'lightgrey'
 
         Returns:
             Concrete material object
         """
-        raise NotImplementedError
+        # Service stress-strain profile
+        Ec = self.calc_concrete_elastic_modulus(fpc, wc)
+        concrete_service = ssp.ConcreteLinearNoTension(
+            elastic_modulus=Ec, ultimate_strain=eps_cu, compressive_strength=0.85 * fpc
+        )
+
+        # Ultimate stress-strain profile
+        beta_1 = self.calc_beta_1(fpc)
+        concrete_ultimate = ssp.RectangularStressBlock(
+            compressive_strength=fpc, alpha=0.85, gamma=beta_1, ultimate_strain=eps_cu
+        )
+
+        # Define the concrete material
+        fr = self.calc_modulus_of_rupture(fpc)
+        concrete = Concrete(
+            name=f"{fpc} ksi Concrete",
+            density=wc / (12**3),  # kci
+            stress_strain_profile=concrete_service,
+            colour=colour,
+            ultimate_stress_strain_profile=concrete_ultimate,
+            flexural_tensile_strength=fr,
+        )
+        raise concrete
 
     def create_steel_material(
         self,
-        yield_strength: float,
-        colour: str = "grey",
+        fy: float = 60,
+        Es: float = 29000.0,
+        eps_fracture: float = 0.3,
+        density: float = 0.49,
+        colour: str = "black",
     ) -> SteelBar:
         """Returns a steel bar material object.
 
-        List assumptions of material properties here...
-
         Args:
-            yield_strength: Steel yield strength
+            fy: Steel yield strength (ksi)
+            Es: Elastic modulus (ksi)
+            eps_fracture: fracture strain of rebar
+            density: unit weight of steel (kcf)
             colour: Colour of the steel for rendering
-
-        Raises:
-            NotImplementedError: If this method has not been implemented by the child
-                class
         """
-        raise NotImplementedError
+        # Rebar stress-strain profile
+        steel_elastic_plastic = ssp.SteelElasticPlastic(
+            yield_strength=fy, elastic_modulus=Es, fracture_strain=eps_fracture
+        )
+
+        # Define rebar material
+        steel = SteelBar(
+            name=f"Grade {fy} Rebar",
+            density=density / (12**3),  # kci
+            stress_strain_profile=steel_elastic_plastic,
+            colour=colour,
+        )
+        return steel
 
     def get_gross_properties(
         self,
@@ -249,7 +326,7 @@ class ACI318(DesignCode):
         grade: str
         density: float
 
-    def calc_phi(
+    def calc_phis(
         self,
         tensile_strains: list[float],
         fy: float = 60,
